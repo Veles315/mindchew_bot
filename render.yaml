@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: mindchew_bot
-    env: python
-    pythonVersion: "3.10"
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python mindchew_bot.py"
-    repo: https://github.com/Veles315/mindchew_bot.git
-    branch: main
