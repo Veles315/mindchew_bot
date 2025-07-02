@@ -1,34 +1,4 @@
 python-telegram-bot==20.7
 openai
 aiohttp
-
-from aiohttp import web
-
-routes = web.RouteTableDef()
-
-@routes.post("/boosty-webhook")
-async def boosty_webhook(request):
-    try:
-        data = await request.json()
-        user_id = str(data["telegram_id"])  # Это ты укажешь в Boosty вручную
-        days = int(data.get("days", 30))
-        until = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-        subscriptions[user_id] = {"until": until}
-        save_subscriptions()
-        print(f"✅ Подписка обновлена для {user_id} до {until}")
-        return web.Response(text="OK")
-    except Exception as e:
-        print(f"❌ Ошибка в Webhook: {e}")
-        return web.Response(status=400, text="Error")
-
-def start_webhook_server():
-    app = web.Application()
-    app.add_routes(routes)
-    web.run_app(app, port=8080)
-
-# Запускаем и бота, и сервер
-import threading
-
-if __name__ == "__main__":
-    threading.Thread(target=main).start()
-    start_webhook_server()
+python-dotenv
