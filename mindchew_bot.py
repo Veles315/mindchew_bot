@@ -506,7 +506,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
 
 # --- Запуск бота ---
-async def main():
+def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
@@ -514,7 +514,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("🤖 MindChewBot запущен.")
-    await app.run_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
