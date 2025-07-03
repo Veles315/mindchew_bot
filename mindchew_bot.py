@@ -506,15 +506,42 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
 
 # --- Запуск бота ---
+from aiohttp import web  # ← уже должно быть вверху
+
+async def handle(request):
+    return web.Response(text="✅ MindChewBot is running.")
+
 def main():
+    import logging
+    logging.basicConfig(level=logging.INFO)
+
+    # — Создаём Telegram Application
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    # — Обработчики команд и сообщений
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("🤖 MindChewBot запущен.")
-    app.run_polling()
+
+    # — Настройки webhook
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # должен быть в твоём .env, пример: https://mindchew-bot.onrender.com
+    PORT = int(os.environ.get("PORT", 10000))  # Render использует именно этот порт
+
+    print(f"🚀 Запуск aiohttp сервера на порту {PORT}")
+
+    # — Стартуем aiohttp-сервер и привязываем webhook
+    async def on_startup(app_):
+        await app.bot.set_webhook(url=WEBHOOK_URL + f"/{TELEGRAM_TOKEN}")
+        print(f"🔗 Установлен webhook: {WEBHOOK_URL}/{TELEGRAM_TOKEN}")
+
+    web_app = web.Application()
+    web_app.router.add_post(f"/{TELEGRAM_TOKEN}", app.webhook_handler)  # вот здесь Telegram слушает
+    web_app.router.add_get("/", handle)  # просто корневая страница для проверки
+    web_app.on_startup.append(on_startup)
+
+    web.run_app(web_app, port=PORT)
 
 if __name__ == "__main__":
     main()
