@@ -310,6 +310,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
            )
            return
 
+
     # Добавляем в историю
     history.append({"role": "user", "content": text})
     user_history[user_id] = history[-50:]  # сохраняем последние 50 сообщений
