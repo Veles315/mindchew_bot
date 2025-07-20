@@ -290,7 +290,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = await call_openai(history)
-        reply = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content
     except Exception as e:
         logging.error(f"OpenAI API error: {e}")
         await update.message.reply_text(f"❗ Ошибка при обращении к OpenAI: {str(e)}")
@@ -322,7 +322,7 @@ async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         response = await call_openai(history)
-        reply = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content
     except Exception as e:
         analysis = "Ошибка при анализе личности."
         print(f"OpenAI error: {e}")
