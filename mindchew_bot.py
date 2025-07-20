@@ -260,47 +260,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text.strip()
 
-    # Проверяем, не в процессе ли установки/редактирования напоминания
-    if user_id in REMINDER_STATE:
-        state = REMINDER_STATE[user_id]
-        step = state.get("step")
-
-        if step == 3:  # Ввод текста нового напоминания
-            date = state.get("date")
-            hour = state.get("hour")
-            minute = state.get("minute")
-            dt_str = f"{date} {hour:02d}:{minute:02d}"
-            reminder_id = f"{user_id}_{int(datetime.now().timestamp())}"
-            user_reminders.setdefault(user_id, []).append({
-                "id": reminder_id,
-                "datetime": dt_str,
-                "text": text
-            })
-            save_reminders()
-            REMINDER_STATE.pop(user_id, None)
-            await update.message.reply_text(f"✅ Напоминание установлено на {dt_str}:\n{text}")
-            return
-        elif step == "edit_text":
-            rid = state.get("reminder_id")
-            reminders = user_reminders.get(user_id, [])
-            for r in reminders:
-                if r["id"] == rid:
-                    r["text"] = text
-                    break
-            save_reminders()
-            REMINDER_STATE.pop(user_id, None)
-            await update.message.reply_text("✅ Текст напоминания обновлен.")
-            return
-
-    # Проверяем лимит бесплатных сообщений
     history = user_history.get(user_id, [])
-
-    # Если вдруг history — не список, сделаем его списком заново
     if not isinstance(history, list):
        history = []
 
+    # Добавляем сообщение пользователя в историю только один раз
     history.append({"role": "user", "content": text})
     user_history[user_id] = history[-50:]
+
+    # Проверяем лимит бесплатных сообщений
     if not is_subscribed(user_id) and len(history) >= FREE_MESSAGE_LIMIT:
         await update.message.reply_text(
             f"🚫 Бесплатный лимит сообщений ({FREE_MESSAGE_LIMIT}) исчерпан.\n"
@@ -310,12 +278,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-
-    # Добавляем в историю
-    history.append({"role": "user", "content": text})
-    user_history[user_id] = history[-50:]  # сохраняем последние 50 сообщений
-
     await update.message.chat.send_action("typing")
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=history
+        )
+        reply = response["choices"][0]["message"]["content"]
+    except Exception as e:
+        logging.error(f"OpenAI API error: {e}")
+        await update.message.reply_text(f"❗ Ошибка при обращении к OpenAI: {str(e)}")
+        return
+
+    history.append({"role": "assistant", "content": reply})
+    user_history[user_id] = history[-50:]
+    save_history()
+
+    await update.message.reply_text(reply)
 
     # Формируем запрос к OpenAI
     try:
@@ -325,8 +305,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply = response["choices"][0]["message"]["content"]
     except Exception as e:
-       print(f"OpenAI API error: {e}")
-       return f"Ошибка при обращении к OpenAI: {str(e)}"
+       logging.error(f"OpenAI API error: {e}")
+       await update.message.reply_text(f"❗ Ошибка при обращении к OpenAI: {str(e)}")
+       return
 
     history.append({"role": "assistant", "content": reply})
     user_history[user_id] = history[-50:]
