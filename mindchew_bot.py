@@ -3,10 +3,14 @@ import json
 import openai
 import asyncio
 import os
+from aiohttp import web
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
+
+
+
 
 
 
@@ -506,41 +510,48 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
 
 # --- Запуск бота ---
-from aiohttp import web  # ← уже должно быть вверху
+
+async def handle_webhook(request):
+    data = await request.json()
+    telegram_app = request.app['telegram_app']  # <== здесь мы получаем telegram-приложение
+    update = Update.de_json(data, telegram_app.bot)
+    await telegram_app.update_queue.put(update)
+    return web.Response(status=200)
 
 async def handle(request):
-    return web.Response(text="✅ MindChewBot is running.")
+    return web.Response(text="MindChew bot is running.")
 
 def main():
     import logging
     logging.basicConfig(level=logging.INFO)
 
-    # — Создаём Telegram Application
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+    PORT = int(os.environ.get("PORT", 10000))
+
+    # 1. Создаём Telegram Application
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # — Обработчики команд и сообщений
+    # 2. Добавляем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # — Настройки webhook
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # должен быть в твоём .env, пример: https://mindchew-bot.onrender.com
-    PORT = int(os.environ.get("PORT", 10000))  # Render использует именно этот порт
+    # 3. aiohttp web-приложение
+    web_app = web.Application()
+    web_app['telegram_app'] = app  # <== Сохраняем ссылку на Telegram-приложение
+    web_app.router.add_post(f"/{TELEGRAM_TOKEN}", handle_webhook)
+    web_app.router.add_get("/", handle)
 
-    print(f"🚀 Запуск aiohttp сервера на порту {PORT}")
-
-    # — Стартуем aiohttp-сервер и привязываем webhook
     async def on_startup(app_):
-        await app.bot.set_webhook(url=WEBHOOK_URL + f"/{TELEGRAM_TOKEN}")
+        await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}")
         print(f"🔗 Установлен webhook: {WEBHOOK_URL}/{TELEGRAM_TOKEN}")
 
-    web_app = web.Application()
-    web_app.router.add_post(f"/{TELEGRAM_TOKEN}", app.webhook_handler)  # вот здесь Telegram слушает
-    web_app.router.add_get("/", handle)  # просто корневая страница для проверки
     web_app.on_startup.append(on_startup)
 
+    print(f"🚀 Запуск aiohttp сервера на порту {PORT}")
     web.run_app(web_app, port=PORT)
 
 if __name__ == "__main__":
