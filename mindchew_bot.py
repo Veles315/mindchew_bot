@@ -28,7 +28,6 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 HISTORY_FILE = "user_history.json"
 REMINDERS_FILE = "user_reminders.json"
-SUBSCRIPTIONS_FILE = "subscriptions.json"  # <-- вот это обязательно
 FREE_MESSAGE_LIMIT = 30
 FREE_REMINDER_LIMIT = 1
 REMINDER_STATE = {}
@@ -42,6 +41,7 @@ def load_json_safe(filepath):
     except (json.JSONDecodeError, FileNotFoundError):
         print(f"⚠️ Не удалось загрузить {filepath}, создаю новый.")
         return {}
+SUBSCRIPTIONS_FILE = "subscriptions.json"  # <-- вот это обязательно
 
 user_history = load_json_safe(HISTORY_FILE)
 user_reminders = load_json_safe(REMINDERS_FILE)
