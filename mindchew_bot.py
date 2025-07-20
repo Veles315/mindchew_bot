@@ -32,11 +32,20 @@ FREE_MESSAGE_LIMIT = 30
 FREE_REMINDER_LIMIT = 1
 REMINDER_STATE = {}
 
-if os.path.exists(HISTORY_FILE):
-    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-        user_history = json.load(f)
-else:
-    user_history = {}
+def load_json_safe(filepath):
+    if not os.path.exists(filepath):
+        return {}
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        print(f"⚠️ Не удалось загрузить {filepath}, создаю новый.")
+        return {}
+
+user_history = load_json_safe(HISTORY_FILE)
+user_reminders = load_json_safe(REMINDERS_FILE)
+subscriptions = load_json_safe(SUBSCRIPTIONS_FILE)
+
 
 if os.path.exists(REMINDERS_FILE):
     with open(REMINDERS_FILE, "r", encoding="utf-8") as f:
@@ -50,6 +59,10 @@ if os.path.exists(SUBSCRIPTIONS_FILE):
         subscriptions = json.load(f)
 else:
     subscriptions = {}
+
+def save_history():
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(user_history, f, ensure_ascii=False, indent=2)
 
 def is_subscribed(user_id):
     sub = subscriptions.get(str(user_id))
@@ -309,8 +322,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history.append({"role": "assistant", "content": reply})
     user_history[user_id] = history[-50:]
 
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(user_history, f, ensure_ascii=False, indent=2)
+    save_history()
 
     await update.message.reply_text(reply)
 
