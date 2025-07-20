@@ -297,25 +297,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(reply)
 
-    # Формируем запрос к OpenAI
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=history
-        )
-        reply = response["choices"][0]["message"]["content"]
-    except Exception as e:
-       logging.error(f"OpenAI API error: {e}")
-       await update.message.reply_text(f"❗ Ошибка при обращении к OpenAI: {str(e)}")
-       return
-
-    history.append({"role": "assistant", "content": reply})
-    user_history[user_id] = history[-50:]
-
-    save_history()
-
-    await update.message.reply_text(reply)
-
 async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.callback_query.from_user.id)
     history = user_history.get(user_id, [])
