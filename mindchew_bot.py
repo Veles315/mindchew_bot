@@ -256,14 +256,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.message.reply_text(f"Неизвестная команда: {data}")
 
-async def call_openai_chat_completion(history):
+async def call_openai(history):
     def sync_call():
-        return openai.ChatCompletion.create(
+        return openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=history
         )
-    response = await asyncio.to_thread(sync_call)
-    return response
+    return await asyncio.to_thread(sync_call)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -290,7 +289,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
 
     try:
-        response = await call_openai_chat_completion(history)
+        response = await call_openai(history)
         reply = response["choices"][0]["message"]["content"]
     except Exception as e:
         logging.error(f"OpenAI API error: {e}")
@@ -322,7 +321,7 @@ async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE
     prompt += "\nДай краткий анализ и советы."
 
     try:
-        response = await call_openai_chat_completion(history)
+        response = await call_openai(history)
         reply = response["choices"][0]["message"]["content"]
     except Exception as e:
         analysis = "Ошибка при анализе личности."
