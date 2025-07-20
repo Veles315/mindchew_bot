@@ -281,7 +281,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
 
     try:
-        response = openai.ChatCompletion.create(
+        response = await openai.chat.completions.acreate(
             model="gpt-4o-mini",
             messages=history
         )
@@ -316,9 +316,9 @@ async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE
     prompt += "\nДай краткий анализ и советы."
 
     try:
-        response = openai.ChatCompletion.create(
+        response = await openai.chat.completions.acreate(
             model="gpt-4o-mini",
-            messages=[{"role": "system", "content": prompt}]
+            messages=history
         )
         analysis = response["choices"][0]["message"]["content"]
     except Exception as e:
