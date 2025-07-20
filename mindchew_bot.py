@@ -2,6 +2,11 @@ import os
 import json
 import openai
 import asyncio
+import logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 from aiohttp import web
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -358,35 +363,53 @@ async def handle_webhook(request):
 async def handle(request):
     return web.Response(text="MindChewBot is running.")
 
-def main():
-    import logging
-    logging.basicConfig(level=logging.INFO)
-
+async def main():
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
     WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-    PORT = int(os.environ.get("PORT", 10000))
+    PORT = int(os.getenv("PORT", "10000"))
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+    # Добавляем хендлеры
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Запускаем приложение (инициализация + запуск update queue)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()  # Для webhook не нужен polling, можно не запускать
+
+    # Устанавливаем webhook
+    await app.bot.set_webhook(f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}")
+
+    # Создаём aiohttp веб-сервер
     web_app = web.Application()
     web_app['telegram_app'] = app
     web_app.router.add_post(f"/{TELEGRAM_TOKEN}", handle_webhook)
     web_app.router.add_get("/", handle)
 
-    async def on_startup(app_):
-        await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}")
-        print(f"🔗 Webhook установлен: {WEBHOOK_URL}/{TELEGRAM_TOKEN}")
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
 
-    web_app.on_startup.append(on_startup)
+    print(f"🚀 Webhook бот запущен на порту {PORT}")
 
-    print(f"🚀 Запуск aiohttp на порту {PORT}")
-    web.run_app(web_app, port=PORT)
+    # Чтобы приложение не завершилось
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+
+    # Остановка и очистка
+    await app.updater.stop()
+    await app.stop()
+    await app.shutdown()
+    await runner.cleanup()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
