@@ -301,14 +301,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     history.append({"role": "user", "content": text})
     user_history[user_id] = history[-50:]
-       if not is_subscribed(user_id) and len(history) >= FREE_MESSAGE_LIMIT:
+    if not is_subscribed(user_id) and len(history) >= FREE_MESSAGE_LIMIT:
         await update.message.reply_text(
             f"🚫 Бесплатный лимит сообщений ({FREE_MESSAGE_LIMIT}) исчерпан.\n"
             "Оформи подписку 💳, чтобы продолжить:\n"
             "[Boosty](https://boosty.to/birukov-systems/posts/89b1960e-ceff-4f71-9b77-9040e631a7db?share=success_publish_link)",
             parse_mode="Markdown"
-           )
-           return
+        )
+        return
 
 
     # Добавляем в историю
