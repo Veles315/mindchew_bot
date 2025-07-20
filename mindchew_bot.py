@@ -303,8 +303,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply = response["choices"][0]["message"]["content"]
     except Exception as e:
-        reply = "Ошибка при обращении к OpenAI. Попробуйте позже."
-        print(f"OpenAI error: {e}")
+       print(f"OpenAI API error: {e}")
+       return f"Ошибка при обращении к OpenAI: {str(e)}"
 
     history.append({"role": "assistant", "content": reply})
     user_history[user_id] = history[-50:]
