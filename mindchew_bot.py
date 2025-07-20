@@ -380,7 +380,7 @@ async def main():
     # Запускаем приложение (инициализация + запуск update queue)
     await app.initialize()
     await app.start()
-    await app.updater.start_polling()  # Для webhook не нужен polling, можно не запускать
+    #await app.updater.start_polling()  # Для webhook не нужен polling, можно не запускать
 
     # Устанавливаем webhook
     await app.bot.set_webhook(f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}")
