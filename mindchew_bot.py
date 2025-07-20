@@ -2,18 +2,18 @@ import os
 import json
 import openai
 import asyncio
-import os
 from aiohttp import web
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    filters
+)
 from dotenv import load_dotenv
-
-
-
-
-
-
 
 # 🔑 ВСТАВЬ СВОИ КЛЮЧИ
 load_dotenv()  # загружает переменные из .env в окружение
@@ -22,12 +22,11 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 HISTORY_FILE = "user_history.json"
-REMINDERS_FILE = "user_reminders.json"  # Файл с напоминаниями
+REMINDERS_FILE = "user_reminders.json"
 FREE_MESSAGE_LIMIT = 30
-FREE_REMINDER_LIMIT = 1  # Разрешено 1 бесплатное активное напоминание
-REMINDER_STATE = {}  # Для диалогов установки напоминаний: user_id: {step, date, time, text}
+FREE_REMINDER_LIMIT = 1
+REMINDER_STATE = {}
 
-# Загрузка истории и напоминаний
 if os.path.exists(HISTORY_FILE):
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
         user_history = json.load(f)
@@ -39,8 +38,8 @@ if os.path.exists(REMINDERS_FILE):
         user_reminders = json.load(f)
 else:
     user_reminders = {}
-SUBSCRIPTIONS_FILE = "subscriptions.json"
 
+SUBSCRIPTIONS_FILE = "subscriptions.json"
 if os.path.exists(SUBSCRIPTIONS_FILE):
     with open(SUBSCRIPTIONS_FILE, "r", encoding="utf-8") as f:
         subscriptions = json.load(f)
@@ -62,33 +61,26 @@ def save_subscriptions():
     with open(SUBSCRIPTIONS_FILE, "w", encoding="utf-8") as f:
         json.dump(subscriptions, f, ensure_ascii=False, indent=2)
 
-# --- Функция сохранения напоминаний ---
 def save_reminders():
     with open(REMINDERS_FILE, "w", encoding="utf-8") as f:
         json.dump(user_reminders, f, ensure_ascii=False, indent=2)
 
-# --- Проверка количества активных напоминаний ---
 def count_active_reminders(user_id):
     now_ts = datetime.now().timestamp()
     reminders = user_reminders.get(user_id, [])
-    # Учитываем только напоминания с временем в будущем
     active = [r for r in reminders if datetime.strptime(r["datetime"], "%Y-%m-%d %H:%M").timestamp() > now_ts]
     return len(active)
 
-# --- Отправка отложенного напоминания ---
 async def send_reminder_later(context, chat_id, text, delay, user_id, reminder_id):
     await asyncio.sleep(delay)
     await context.bot.send_message(chat_id=chat_id, text=f"🔔 Напоминание:\n{text}")
-    # После отправки — удаляем напоминание из списка
     if user_id in user_reminders:
         user_reminders[user_id] = [r for r in user_reminders[user_id] if r["id"] != reminder_id]
         save_reminders()
 
-# --- Стартовое меню ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🧠 Анализ личности", callback_data="analyze_personality")],
-       # [InlineKeyboardButton("⏰ Установить напоминание", callback_data="set_reminder")],
         [InlineKeyboardButton("📝 Мои напоминания", callback_data="my_reminders")],
         [InlineKeyboardButton("💳 Подписка на Boosty", url="https://boosty.to/birukov-systems/posts/89b1960e-ceff-4f71-9b77-9040e631a7db?share=success_publish_link")],
         [InlineKeyboardButton("♻️ Сбросить историю", callback_data="reset_history")]
@@ -105,29 +97,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-
-# --- Показывает список активных напоминаний ---
 async def show_reminders_list(user_id, query):
     reminders = user_reminders.get(user_id, [])
     keyboard = []
-
     if reminders:
         for r in reminders:
             dt = r["datetime"]
             txt = r["text"]
             rid = r["id"]
-            keyboard.append([
-                InlineKeyboardButton(f"{dt} — {txt[:20]}...", callback_data=f"edit_reminder_{rid}")
-            ])
-
-    # Добавляем универсальные кнопки (даже если напоминаний нет)
+            keyboard.append([InlineKeyboardButton(f"{dt} — {txt[:20]}...", callback_data=f"edit_reminder_{rid}")])
     keyboard.append([InlineKeyboardButton("➕ Новое напоминание", callback_data="set_reminder")])
     keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])
-
     text = "📋 Твои напоминания:" if reminders else "📭 У тебя нет активных напоминаний."
     await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# --- Обработчик кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
@@ -136,14 +119,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "analyze_personality":
         await analyze_personality(update, context)
-
     elif data == "reset_history":
         if user_id in user_history:
             del user_history[user_id]
         await query.message.reply_text("♻️ История сброшена.")
-
     elif data == "set_reminder":
-        # Проверяем лимит бесплатных напоминаний
         active_count = count_active_reminders(user_id)
         if not is_subscribed(user_id) and active_count >= FREE_REMINDER_LIMIT:
             await query.message.reply_text(
@@ -152,7 +132,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             return
-
         REMINDER_STATE[user_id] = {"step": "date"}
         today = datetime.now().date()
         buttons = []
@@ -160,35 +139,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             day = today + timedelta(days=i)
             buttons.append([InlineKeyboardButton(day.strftime("%Y-%m-%d"), callback_data=f"reminder_date_{day.isoformat()}")])
         await query.message.reply_text("📅 Выбери дату для напоминания:", reply_markup=InlineKeyboardMarkup(buttons))
-
     elif data == "my_reminders":
-       await show_reminders_list(user_id, query)
-
+        await show_reminders_list(user_id, query)
     elif data.startswith("reminder_date_"):
         date_str = data[len("reminder_date_"):]
         REMINDER_STATE[user_id]["date"] = date_str
         REMINDER_STATE[user_id]["step"] = "hour"
-
         hours = [InlineKeyboardButton(f"{h:02d}", callback_data=f"reminder_hour_{h}") for h in range(24)]
         keyboard = [hours[i:i+6] for i in range(0, 24, 6)]
-
         await query.message.reply_text("🕒 Выбери час:", reply_markup=InlineKeyboardMarkup(keyboard))
-
     elif data.startswith("reminder_hour_"):
         hour = int(data[len("reminder_hour_"):])
         REMINDER_STATE[user_id]["hour"] = hour
         REMINDER_STATE[user_id]["step"] = "minute"
-
         minutes = [0, 15, 30, 45]
         buttons = [InlineKeyboardButton(f"{m:02d}", callback_data=f"reminder_minute_{m}") for m in minutes]
         await query.message.reply_text("⏱ Выбери минуты:", reply_markup=InlineKeyboardMarkup([buttons]))
-
     elif data.startswith("reminder_minute_"):
         minute = int(data[len("reminder_minute_"):])
         REMINDER_STATE[user_id]["minute"] = minute
         REMINDER_STATE[user_id]["step"] = 3
         await query.message.reply_text("💬 Что напомнить? Введи текст напоминания:")
-
     elif data.startswith("edit_reminder_"):
         rid = data[len("edit_reminder_"):]
         reminders = user_reminders.get(user_id, [])
@@ -196,8 +167,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not reminder:
             await query.message.reply_text("Напоминание не найдено.")
             return
-
-        # Меню редактирования напоминания
         keyboard = [
             [InlineKeyboardButton("Изменить текст", callback_data=f"edit_text_{rid}")],
             [InlineKeyboardButton("Изменить дату и время", callback_data=f"edit_datetime_{rid}")],
@@ -208,22 +177,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Напоминание:\n{reminder['datetime']}\n{reminder['text']}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
     elif data.startswith("delete_reminder_"):
         rid = data[len("delete_reminder_"):]
         reminders = user_reminders.get(user_id, [])
         user_reminders[user_id] = [r for r in reminders if r["id"] != rid]
         save_reminders()
         await query.message.reply_text("✅ Напоминание удалено.")
-
-        # Показываем обновлённый список
         await show_reminders_list(user_id, query)
-
     elif data.startswith("edit_text_"):
         rid = data[len("edit_text_"):]
         REMINDER_STATE[user_id] = {"step": "edit_text", "reminder_id": rid}
         await query.message.reply_text("Введите новый текст напоминания:")
-
     elif data.startswith("edit_datetime_"):
         rid = data[len("edit_datetime_"):]
         REMINDER_STATE[user_id] = {"step": "edit_datetime_date", "reminder_id": rid}
@@ -233,293 +197,166 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             day = today + timedelta(days=i)
             buttons.append([InlineKeyboardButton(day.strftime("%Y-%m-%d"), callback_data=f"edit_date_{rid}_{day.isoformat()}")])
         await query.message.reply_text("Выберите новую дату:", reply_markup=InlineKeyboardMarkup(buttons))
-
     elif data.startswith("edit_date_"):
         parts = data.split("_")
         rid = parts[2]
         new_date = parts[3]
         REMINDER_STATE[user_id]["new_date"] = new_date
         REMINDER_STATE[user_id]["step"] = "edit_datetime_hour"
-
         hours = [InlineKeyboardButton(f"{h:02d}", callback_data=f"edit_hour_{rid}_{h}") for h in range(24)]
         keyboard = [hours[i:i+6] for i in range(0, 24, 6)]
         await query.message.reply_text("Выберите новый час:", reply_markup=InlineKeyboardMarkup(keyboard))
-
     elif data.startswith("edit_hour_"):
         parts = data.split("_")
         rid = parts[2]
         new_hour = int(parts[3])
         REMINDER_STATE[user_id]["new_hour"] = new_hour
         REMINDER_STATE[user_id]["step"] = "edit_datetime_minute"
-
         minutes = [0, 15, 30, 45]
         buttons = [InlineKeyboardButton(f"{m:02d}", callback_data=f"edit_minute_{rid}_{m}") for m in minutes]
         await query.message.reply_text("Выберите новые минуты:", reply_markup=InlineKeyboardMarkup([buttons]))
-
     elif data.startswith("edit_minute_"):
         parts = data.split("_")
         rid = parts[2]
         new_minute = int(parts[3])
-        state = REMINDER_STATE[user_id]
-
-        # Обновляем напоминание
+        state = REMINDER_STATE.get(user_id)
+        new_date = state.get("new_date")
+        new_hour = state.get("new_hour")
+        dt_str = f"{new_date} {new_hour:02d}:{new_minute:02d}"
         reminders = user_reminders.get(user_id, [])
-        reminder = next((r for r in reminders if r["id"] == rid), None)
-        if not reminder:
-            await query.message.reply_text("Напоминание не найдено.")
-            return
-
-        new_dt_str = f"{state['new_date']} {state['new_hour']:02d}:{new_minute:02d}"
-        try:
-            dt_obj = datetime.strptime(new_dt_str, "%Y-%m-%d %H:%M")
-            if dt_obj < datetime.now():
-                await query.message.reply_text("Время уже прошло. Попробуйте снова.")
-                return
-        except:
-            await query.message.reply_text("Неверный формат даты/времени.")
-            return
-
-        reminder["datetime"] = new_dt_str
+        for r in reminders:
+            if r["id"] == rid:
+                r["datetime"] = dt_str
+                break
         save_reminders()
         REMINDER_STATE.pop(user_id, None)
-        await query.message.reply_text("Дата и время напоминания обновлены.")
-        # Показываем меню напоминаний
-        await button_handler(update, context)
-
+        await query.message.reply_text("✅ Дата и время напоминания обновлены.")
+        await show_reminders_list(user_id, query)
     elif data == "back_to_menu":
-        if update.callback_query:
-            await update.callback_query.answer()
-            await show_main_menu(update, context)
+        await start(update, context)
+    else:
+        await query.message.reply_text(f"Неизвестная команда: {data}")
 
-# --- Обработка сообщений пользователя ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    msg = update.message.text.strip()
+    user_id = str(update.message.from_user.id)
+    text = update.message.text.strip()
 
-    # Проверяем, есть ли состояние для установки или редактирования напоминания
+    # Проверяем, не в процессе ли установки/редактирования напоминания
     if user_id in REMINDER_STATE:
         state = REMINDER_STATE[user_id]
+        step = state.get("step")
 
-        # Установка нового напоминания (шаги выбора даты/времени и текста)
-        if state.get("step") == 3:
-            state["text"] = msg
-            dt_str = f"{state['date']} {state['hour']:02d}:{state['minute']:02d}"
-            try:
-                remind_at = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-                delay = (remind_at - datetime.now()).total_seconds()
-                if delay < 0:
-                    await update.message.reply_text("⏳ Время уже прошло, попробуйте снова.")
-                    return
-
-                # Сохраняем напоминание с уникальным ID
-                rid = f"{int(datetime.now().timestamp())}_{user_id}"
-                reminder = {
-                    "id": rid,
-                    "datetime": dt_str,
-                    "text": state["text"]
-                }
-                if user_id not in user_reminders:
-                    user_reminders[user_id] = []
-                user_reminders[user_id].append(reminder)
-                save_reminders()
-
-                # Запускаем отложенную отправку
-                asyncio.create_task(send_reminder_later(context, update.effective_chat.id, state["text"], delay, user_id, rid))
-
-                await update.message.reply_text("✅ Напоминание установлено!")
-                REMINDER_STATE.pop(user_id, None)
-                return
-            except Exception as e:
-                await update.message.reply_text(f"⚠️ Ошибка: {e}")
-                return
-
-        # Редактирование текста напоминания
-        elif state.get("step") == "edit_text":
+        if step == 3:  # Ввод текста нового напоминания
+            date = state.get("date")
+            hour = state.get("hour")
+            minute = state.get("minute")
+            dt_str = f"{date} {hour:02d}:{minute:02d}"
+            reminder_id = f"{user_id}_{int(datetime.now().timestamp())}"
+            user_reminders.setdefault(user_id, []).append({
+                "id": reminder_id,
+                "datetime": dt_str,
+                "text": text
+            })
+            save_reminders()
+            REMINDER_STATE.pop(user_id, None)
+            await update.message.reply_text(f"✅ Напоминание установлено на {dt_str}:\n{text}")
+            return
+        elif step == "edit_text":
             rid = state.get("reminder_id")
             reminders = user_reminders.get(user_id, [])
-            reminder = next((r for r in reminders if r["id"] == rid), None)
-            if reminder:
-                reminder["text"] = msg
-                save_reminders()
-                await update.message.reply_text("Текст напоминания обновлен.")
-            else:
-                await update.message.reply_text("Напоминание не найдено.")
+            for r in reminders:
+                if r["id"] == rid:
+                    r["text"] = text
+                    break
+            save_reminders()
             REMINDER_STATE.pop(user_id, None)
+            await update.message.reply_text("✅ Текст напоминания обновлен.")
             return
 
-    # Иначе — обрабатываем обычное сообщение с GPT (без изменений)
-    if user_id not in user_history:
-        user_history[user_id] = {"messages": [], "count": 0}
-    history = user_history[user_id]
-
-    if not is_subscribed(user_id) and history["count"] >= FREE_MESSAGE_LIMIT:
+    # Проверяем лимит бесплатных сообщений
+    history = user_history.get(user_id, [])
+    if not is_subscribed(user_id) and len(history) >= FREE_MESSAGE_LIMIT:
         await update.message.reply_text(
-            "🚫 Доступ ограничен. Чтобы продолжить — оформи подписку 💳: [Boosty](https://boosty.to/birukov-systems/posts/89b1960e-ceff-4f71-9b77-9040e631a7db?share=success_publish_link)",
+            f"🚫 Бесплатный лимит сообщений ({FREE_MESSAGE_LIMIT}) исчерпан.\n"
+            "Оформи подписку 💳, чтобы продолжить:\n"
+            "[Boosty](https://boosty.to/birukov-systems/posts/89b1960e-ceff-4f71-9b77-9040e631a7db?share=success_publish_link)",
             parse_mode="Markdown"
         )
         return
 
-    history["messages"].append({"role": "user", "content": msg})
-    history["count"] += 1
+    # Добавляем в историю
+    history.append({"role": "user", "content": text})
+    user_history[user_id] = history[-50:]  # сохраняем последние 50 сообщений
 
+    await update.message.chat.send_action("typing")
+
+    # Формируем запрос к OpenAI
     try:
-        response = openai.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[
-        {
-        "role": "system",
-        "content": (
-            "Ты — эмпатичный собеседник. Твоя задача — помочь человеку понять свои чувства и мысли. "
-            "Не давай советов и не учи жизни. "
-            "Говори просто и по-человечески. "
-            "Отражай эмоции собеседника и задавай бережные, понятные вопросы. "
-            "Избегай формальных и шаблонных фраз вроде 'Важно уважать границы'. "
-            "Вот пример: 'Похоже, тебе было обидно, что это произошло без твоего согласия. Правильно ли я понял?'"
-                    )
-         },
-           *history["messages"][-10:]
-        ],
-        temperature=0.7,
-        max_tokens=700
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=history
         )
-
-        reply = response.choices[0].message.content.strip()
-        await update.message.reply_text(reply)
-        history["messages"].append({"role": "assistant", "content": reply})
+        reply = response["choices"][0]["message"]["content"]
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Ошибка: {e}")
+        reply = "Ошибка при обращении к OpenAI. Попробуйте позже."
+        print(f"OpenAI error: {e}")
+
+    history.append({"role": "assistant", "content": reply})
+    user_history[user_id] = history[-50:]
 
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(user_history, f, ensure_ascii=False, indent=2)
 
-# --- Анализ личности (как есть) ---
+    await update.message.reply_text(reply)
+
 async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id if update.message else update.callback_query.from_user.id)
+    user_id = str(update.callback_query.from_user.id)
+    history = user_history.get(user_id, [])
+    await update.callback_query.answer()
 
-    if user_id not in user_history or not user_history[user_id]["messages"]:
-        text = "ℹ️ Нет истории сообщений для анализа."
-        if update.message:
-            await update.message.reply_text(text)
-        else:
-            await update.callback_query.message.reply_text(text)
+    # Если нет истории, просим написать что-то
+    if not history:
+        await update.callback_query.message.reply_text("Напишите что-нибудь, чтобы я мог проанализировать вашу личность.")
         return
 
-    if "mbti" in user_history[user_id]:
-        text = f"🧠 Вот твой сохранённый анализ личности:\n\n{user_history[user_id]['mbti']}"
-        if update.message:
-            await update.message.reply_text(text)
-        else:
-            await update.callback_query.message.reply_text(text)
-        return
+    await update.callback_query.message.chat.send_action("typing")
 
-    user_msgs = [msg["content"] for msg in user_history[user_id]["messages"] if msg["role"] == "user"]
-    total_chars = sum(len(m) for m in user_msgs)
-    MIN_CHARS = 600
-
-    if total_chars < MIN_CHARS:
-        text = f"⚠️ Недостаточно данных для точного анализа.\nПожалуйста, напиши ещё минимум {MIN_CHARS} символов суммарно."
-        if update.message:
-            await update.message.reply_text(text)
-        else:
-            await update.callback_query.message.reply_text(text)
-        return
-
-    prompt = "Определи тип личности MBTI и дай краткий отчет, не длиннее 450 символов, основываясь на этих сообщениях:\n\n"
-    for i, m in enumerate(user_msgs, 1):
-        prompt += f"{i}. {m}\n"
+    prompt = "Проанализируй личность пользователя по следующим сообщениям:\n"
+    for h in history:
+        if h["role"] == "user":
+            prompt += h["content"] + "\n"
+    prompt += "\nДай краткий анализ и советы."
 
     try:
-        response = openai.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Ты — эксперт по типам личности MBTI. Напиши развернутый и дружелюбный анализ личности пользователя, объёмом примерно 1300-1500 символов. В анализе обязательно:\n"
-                        "1. Кратко опиши основной тип личности (MBTI).\n"
-                        "2. Найди и подробно опиши тёмные зоны — сложности и внутренние препятствия, с которыми может сталкиваться человек с этим типом.\n"
-                        "3. Определи зоны личностного роста — что важно развивать, чтобы улучшить качество жизни, повысить комфорт и эффективность.\n"
-                        "4. Объясни, зачем пользователю важно понимать свой тип личности, как это знание поможет в личностном развитии, построении отношений и повышении общего благополучия.\n"
-                        "Начни с заголовка \"🧠 Анализ MBTI:\" и пиши структурировано, с понятными предложениями и дружелюбным тоном."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0,
-            max_tokens=500
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}]
         )
-
-        answer = response.choices[0].message.content.strip()
-
-        MAX_RESPONSE_CHARS = 3500
-        if len(answer) > MAX_RESPONSE_CHARS:
-            answer = answer[:MAX_RESPONSE_CHARS].rstrip() + "\n\n… (ответ сокращён)"
-
-        user_history[user_id]["mbti"] = answer
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(user_history, f, ensure_ascii=False, indent=2)
-
-        text = answer
-        if update.message:
-            await update.message.reply_text(text)
-        else:
-            await update.callback_query.message.reply_text(text)
-
+        analysis = response["choices"][0]["message"]["content"]
     except Exception as e:
-        text = f"⚠️ Ошибка при анализе: {e}"
-        if update.message:
-            await update.message.reply_text(text)
-        else:
-            await update.callback_query.message.reply_text(text)
+        analysis = "Ошибка при анализе личности."
+        print(f"OpenAI error: {e}")
 
+    await update.callback_query.message.reply_text(analysis)
 
-# --- Сброс истории ---
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
+    user_id = str(update.message.from_user.id)
     if user_id in user_history:
         del user_history[user_id]
-        await update.message.reply_text("♻️ История очищена.")
-    else:
-        await update.message.reply_text("Нет истории.")
+    await update.message.reply_text("История очищена.")
 
-async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🧠 Анализ личности", callback_data="analyze_personality")],
-        [InlineKeyboardButton("📝 Мои напоминания", callback_data="my_reminders")],
-        [InlineKeyboardButton("💳 Подписка на Boosty", url="https://boosty.to/birukov-systems/posts/89b1960e-ceff-4f71-9b77-9040e631a7db?share=success_publish_link")],
-        [InlineKeyboardButton("♻️ Сбросить историю", callback_data="reset_history")]
-    ]
-    text = """🧠 Привет! Я — MindChewBot.
-Напиши, что у тебя в голове — всё, что тревожит или просто крутится в мыслях.
-
-Я помогу навести порядок, покажу твой тип личности и подскажу, где могут быть внутренние затыки.
-
-✍ Просто начни писать — как другу."""
-
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-        except:
-            # Если редактировать нельзя (например, сообщение удалено) — отправляем новое сообщение
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-    elif update.message:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-# --- Вызов меню ---
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await show_main_menu(update, context)
-
-# --- Запуск бота ---
+    await start(update, context)
 
 async def handle_webhook(request):
     data = await request.json()
-    telegram_app = request.app['telegram_app']  # <== здесь мы получаем telegram-приложение
+    telegram_app = request.app['telegram_app']
     update = Update.de_json(data, telegram_app.bot)
     await telegram_app.update_queue.put(update)
     return web.Response(status=200)
 
 async def handle(request):
-    return web.Response(text="MindChew bot is running.")
+    return web.Response(text="MindChewBot is running.")
 
 def main():
     import logging
@@ -529,29 +366,26 @@ def main():
     WEBHOOK_URL = os.getenv("WEBHOOK_URL")
     PORT = int(os.environ.get("PORT", 10000))
 
-    # 1. Создаём Telegram Application
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # 2. Добавляем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # 3. aiohttp web-приложение
     web_app = web.Application()
-    web_app['telegram_app'] = app  # <== Сохраняем ссылку на Telegram-приложение
+    web_app['telegram_app'] = app
     web_app.router.add_post(f"/{TELEGRAM_TOKEN}", handle_webhook)
     web_app.router.add_get("/", handle)
 
     async def on_startup(app_):
         await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}")
-        print(f"🔗 Установлен webhook: {WEBHOOK_URL}/{TELEGRAM_TOKEN}")
+        print(f"🔗 Webhook установлен: {WEBHOOK_URL}/{TELEGRAM_TOKEN}")
 
     web_app.on_startup.append(on_startup)
 
-    print(f"🚀 Запуск aiohttp сервера на порту {PORT}")
+    print(f"🚀 Запуск aiohttp на порту {PORT}")
     web.run_app(web_app, port=PORT)
 
 if __name__ == "__main__":
