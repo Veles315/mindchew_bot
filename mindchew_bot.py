@@ -90,9 +90,11 @@ def count_active_reminders(user_id):
     active = [r for r in reminders if datetime.strptime(r["datetime"], "%Y-%m-%d %H:%M").timestamp() > now_ts]
     return len(active)
 
-async def send_reminder_later(context, chat_id, text, delay, user_id, reminder_id):
+async def send_reminder_later(bot, chat_id, text, delay, user_id, reminder_id):
+    logging.info(f"Reminder will fire in {delay} seconds for chat {chat_id}")
     await asyncio.sleep(delay)
-    await context.bot.send_message(chat_id=chat_id, text=f"🔔 Напоминание:\n{text}")
+    logging.info(f"Sending reminder to chat {chat_id}")
+    await bot.send_message(chat_id=chat_id, text=f"🔔 Напоминание:\n{text}")
     if user_id in user_reminders:
         user_reminders[user_id] = [r for r in user_reminders[user_id] if r["id"] != reminder_id]
         save_reminders()
@@ -291,7 +293,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_reminders()
 
         # Запускаем отложенную отправку напоминания
-        asyncio.create_task(send_reminder_later(context, update.message.chat.id, text, delay, user_id, reminder["id"]))
+        asyncio.create_task(send_reminder_later(context.bot, update.message.chat.id, text, delay, user_id, reminder["id"]))
 
         await update.message.reply_text(f"✅ Напоминание установлено на {dt_str}.")
 
