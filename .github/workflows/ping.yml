@@ -1,0 +1,13 @@
+name: Keep Bot Alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # Пинг каждые 25 минут
+  workflow_dispatch:        # Возможность ручного запуска
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl ping to bot
+        run: curl --silent --show-error https://mindchew-bot-1.onrender.com
