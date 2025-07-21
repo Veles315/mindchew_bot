@@ -302,6 +302,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(reply)
 
+ # 👇 Если пользователь вводит текст напоминания
+    state = REMINDER_STATE.get(user_id)
+    if state and isinstance(state, dict) and state.get("step") == 3:
+        date = state["date"]
+        hour = state["hour"]
+        minute = state["minute"]
+        dt_str = f"{date} {hour:02d}:{minute:02d}"
+        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+        delay = (dt - datetime.now()).total_seconds()
+        if delay <= 0:
+            await update.message.reply_text("❗ Дата и время уже прошли. Выберите будущее время.")
+            return
+
+        reminder = {
+            "id": str(datetime.now().timestamp()),
+            "datetime": dt_str,
+            "text": text,
+        }
+        user_reminders.setdefault(user_id, []).append(reminder)
+        save_reminders()
+
+        # Запускаем отложенную отправку
+        asyncio.create_task(send_reminder_later(context, update.message.chat.id, text, delay, user_id, reminder["id"]))
+        await update.message.reply_text(f"✅ Напоминание установлено на {dt_str}.")
+
+        REMINDER_STATE.pop(user_id, None)
+        return
+
 async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.callback_query.from_user.id)
     history = user_history.get(user_id, [])
