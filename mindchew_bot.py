@@ -338,31 +338,64 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def analyze_personality(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.callback_query.from_user.id)
+    query = update.callback_query
+    user_id = str(query.from_user.id)
     history = user_history.get(user_id, [])
-    await update.callback_query.answer()
 
-    # Если нет истории, просим написать что-то
+    await query.answer()
+
     if not history:
-        await update.callback_query.message.reply_text("Напишите что-нибудь, чтобы я мог проанализировать вашу личность.")
+        await query.message.reply_text(
+            "Сначала напиши мне несколько сообщений — тогда я смогу что-то проанализировать 😌"
+        )
         return
 
-    await update.callback_query.message.chat.send_action("typing")
+    await query.message.chat.send_action("typing")
 
-    prompt = "Проанализируй личность пользователя по следующим сообщениям:\n"
-    for h in history:
-        if h["role"] == "user":
-            prompt += h["content"] + "\n"
-    prompt += "\nДай краткий анализ и советы."
+    # ── Собираем только сообщения пользователя ──
+    user_messages = [h["content"] for h in history if h["role"] == "user"]
+
+    if not user_messages:
+        await query.message.reply_text("Я не нашёл твоих сообщений для анализа… странно 🤔")
+        return
+
+    # Более точный и структурированный промпт
+    prompt = """Ты психолог и типолог, работаешь в системе MBTI + немного Big Five и коучинговых паттернов.
+Проанализируй сообщения пользователя ниже и дай структурированный разбор личности.
+
+Сначала определи **наиболее вероятный тип MBTI** (4 буквы) и степень уверенности (высокая / средняя / низкая).
+
+Затем кратко разбери по шкалам:
+• I/E — 
+• N/S — 
+• T/F — 
+• J/P — 
+
+После этого дай:
+1. Ключевые сильные стороны
+2. Вероятные слабые стороны / слепые зоны
+3. Типичные внутренние конфликты или "затыки", которые могут проявляться
+4. 2–3 коротких совета, что можно улучшить / на что обратить внимание
+
+Стиль ответа: честный, доброжелательный, без воды, по делу. Не льсти и не демонизируй.
+
+Сообщения пользователя (самые свежие сверху):
+
+""" + "\n".join(user_messages[-18:])   # берём последние ~18 сообщений — обычно достаточно
+
+    messages_for_api = [
+        {"role": "system", "content": "Ты точный, наблюдательный психолог-типолог."},
+        {"role": "user",   "content": prompt}
+    ]
 
     try:
-        response = await call_openai(history)
-        reply = response.choices[0].message.content
+        response = await call_openai(messages_for_api)
+        analysis_text = response.choices[0].message.content.strip()
     except Exception as e:
-        analysis = "Ошибка при анализе личности."
-        print(f"OpenAI error: {e}")
+        logging.error(f"Ошибка анализа личности: {e}", exc_info=True)
+        analysis_text = "⚠️ Не удалось выполнить анализ — ошибка связи с моделью. Попробуй позже."
 
-    await update.callback_query.message.reply_text(analysis)
+    await query.message.reply_text(analysis_text, parse_mode="Markdown")
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
